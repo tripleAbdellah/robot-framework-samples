@@ -5,6 +5,7 @@ no Robot Framework dependency — takes whatever EntityDefinitions already
 returned, from either transport (Python client or in-page fetch).
 """
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any
 
@@ -77,6 +78,42 @@ def check_ownership_type(entity: dict[str, Any], expected: str) -> Violation | N
             rule="ownership_type",
             logical_name=logical_name,
             message=f"'{logical_name}' has OwnershipType '{actual}', expected '{expected}'",
+        )
+    return None
+
+
+def _form_has_role_restriction(form_xml: str) -> bool:
+    """True if a form's XML restricts it to specific security roles.
+
+    Confirmed live: this is NOT exposed as a queryable attribute or relationship on
+    systemform at all (checked both — neither exists). It's embedded in the formxml
+    blob itself: a restricted form has a <roles> element listing role GUIDs; an open
+    form has no <roles> element. Only presence/child-count is checked here — the
+    inner <role> element's own attribute names weren't verified, since no restricted
+    form exists in this tenant to check against.
+    """
+    root = ET.fromstring(form_xml)
+    roles_element = root.find(".//roles")
+    return roles_element is not None and len(roles_element) > 0
+
+
+def check_main_form_available_to_everyone(
+    main_forms: list[dict[str, Any]], logical_name: str
+) -> Violation | None:
+    """Every active Main Form must have no security-role restrictions.
+
+    Flags ANY restricted active main form, not just "at least one open" — a table can
+    have multiple main forms, and the concern here is accidentally locking some users
+    out of the default view, so this defaults to the stricter reading. Adjust if "at
+    least one open form is enough" better matches the actual policy.
+    """
+    restricted = [f for f in main_forms if _form_has_role_restriction(f["formxml"])]
+    if restricted:
+        names = [f["name"] for f in restricted]
+        return Violation(
+            rule="main_form_available_to_everyone",
+            logical_name=logical_name,
+            message=f"'{logical_name}' has main form(s) restricted to specific security roles: {names}",
         )
     return None
 

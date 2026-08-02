@@ -81,6 +81,20 @@ class DataverseClient:
         ).json()["value"]
         return [e for e in entities if e.get("IsCustomEntity") and not e.get("IsManaged")]
 
+    def list_main_forms(self, logical_name: str) -> list[dict[str, Any]]:
+        """Fetches every active Main Form (type=2) for a table, including formxml so
+        conventions.check_main_form_available_to_everyone can inspect role restrictions.
+
+        Unlike EntityDefinitions, systemforms is a regular data entity — confirmed live
+        that compound $filter (objecttypecode + type + formactivationstate) works
+        normally here, no client-side filtering workaround needed.
+        """
+        path = (
+            "systemforms?$select=name,type,formactivationstate,formxml"
+            f"&$filter=objecttypecode eq '{logical_name}' and type eq 2 and formactivationstate eq 1"
+        )
+        return self._request("GET", path).json()["value"]
+
     def get_table_metadata(self, logical_name: str) -> dict[str, Any]:
         """Fetches entity (table) metadata: attributes, types, display names."""
         path = (

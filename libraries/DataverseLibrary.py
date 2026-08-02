@@ -68,6 +68,11 @@ class DataverseLibrary:
         return self._require_client().list_custom_tables()
 
     @keyword
+    def list_main_forms(self, logical_name: str) -> list[dict[str, Any]]:
+        """Fetches every active Main Form for a table, for convention checks."""
+        return self._require_client().list_main_forms(logical_name)
+
+    @keyword
     def create_record(self, entity_set: str, data: dict[str, Any]) -> str | None:
         """Creates a record in the given entity set. Returns its id."""
         return self._require_client().create_record(entity_set, data)

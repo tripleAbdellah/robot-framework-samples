@@ -1,7 +1,8 @@
 *** Settings ***
 Documentation    Governance/convention checks for custom Dataverse tables — naming pattern,
-...              description presence, icon presence, ownership type. Stateless: no
-...              baseline/snapshot needed, applies uniformly to every custom table.
+...              description presence, icon presence, ownership type, and main form
+...              availability. Stateless: no baseline/snapshot needed, applies uniformly
+...              to every custom table.
 Library          Collections
 Library          ../../libraries/TableConventions.py
 Resource         dataverse_keywords.resource
@@ -19,15 +20,17 @@ ${EXPECTED_OWNERSHIP}    ${EMPTY}
 *** Keywords ***
 Get Table Convention Violations
     [Documentation]    Fetches every custom table and runs naming/description/icon/
-    ...                ownership checks against each. Returns a flat list of violation
-    ...                dicts (rule, logical_name, message) across all tables.
+    ...                ownership/main-form-availability checks against each. Returns a
+    ...                flat list of violation dicts (rule, logical_name, message) across
+    ...                all tables.
     ${tables}=    Get Custom Tables
     ${ownership}=    Set Variable If    "${EXPECTED_OWNERSHIP}" != ""    ${EXPECTED_OWNERSHIP}    ${None}
     ${all_violations}=    Create List
     FOR    ${table}    IN    @{tables}
-        ${violations}=    Check Table Conventions    ${table}    ${TABLE_PREFIX}    ${ownership}
-        FOR    ${violation}    IN    @{violations}
-            Append To List    ${all_violations}    ${violation}
-        END
+        ${table_violations}=    Check Table Conventions    ${table}    ${TABLE_PREFIX}    ${ownership}
+        Append To List    ${all_violations}    @{table_violations}
+        ${main_forms}=    Get Main Forms    ${table}[LogicalName]
+        ${form_violations}=    Check Main Form Conventions    ${main_forms}    ${table}[LogicalName]
+        Append To List    ${all_violations}    @{form_violations}
     END
     RETURN    ${all_violations}

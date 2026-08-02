@@ -92,3 +92,13 @@ Get Custom Tables
         ${tables}=    DataverseLibrary.List Custom Tables
     END
     RETURN    ${tables}
+
+Get Main Forms
+    [Documentation]    Fetches every active Main Form for a table, for convention checks.
+    [Arguments]    ${logical_name}
+    IF    "${AUTH_MODE}" == "browser"
+        ${forms}=    List Main Forms In Browser    ${logical_name}
+    ELSE
+        ${forms}=    DataverseLibrary.List Main Forms    ${logical_name}
+    END
+    RETURN    ${forms}

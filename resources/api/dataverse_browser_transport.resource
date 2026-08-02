@@ -77,6 +77,16 @@ List Custom Tables In Browser
     ${custom_tables}=    Evaluate    [e for e in $entities if e.get('IsCustomEntity') and not e.get('IsManaged')]
     RETURN    ${custom_tables}
 
+List Main Forms In Browser
+    [Documentation]    Fetches every active Main Form (type=2) for a table. Unlike
+    ...                EntityDefinitions, systemforms is a regular data entity —
+    ...                confirmed live that compound $filter (objecttypecode + type +
+    ...                formactivationstate) works normally here.
+    [Arguments]    ${logical_name}
+    ${path}=    Set Variable    systemforms?$select=name,type,formactivationstate,formxml&$filter=objecttypecode eq '${logical_name}' and type eq 2 and formactivationstate eq 1
+    ${result}=    Dataverse Request In Browser    GET    ${path}
+    RETURN    ${result}[json][value]
+
 Get Table Metadata In Browser
     [Documentation]    Fetches table (entity) metadata: attributes, types, display names.
     [Arguments]    ${logical_name}
