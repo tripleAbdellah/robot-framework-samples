@@ -1,0 +1,7 @@
+persoon:
+  voornaam: Ahmed
+  achternaam: Tester
+
+ww_aanvraag:
+  uitkeringstype: WW
+  verwacht_status: Nieuw

@@ -1,0 +1,4 @@
+robotframework>=7.0
+robotframework-browser>=19.0
+requests>=2.32
+msal>=1.28
