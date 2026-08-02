@@ -14,15 +14,32 @@ Library          String
 
 *** Keywords ***
 Dataverse Request In Browser
-    [Documentation]    Makes one Dataverse Web API call from inside the page. Returns a
-    ...                dict: status, ok, json (parsed body, or ${None} if not JSON), and
-    ...                odataEntityId (the OData-EntityId response header, used to read a
-    ...                newly-created record's id). Fails if the response wasn't 2xx.
+    [Documentation]    Makes one Dataverse Web API call from inside the page, retrying if
+    ...                the browser was still mid-navigation. Dynamics 365's UCI app does
+    ...                several client-side redirects right after login, which can destroy
+    ...                the JS execution context mid-call — confirmed live via
+    ...                "Execution context was destroyed, most likely because of a
+    ...                navigation". Transient, not a real request error, so this retries
+    ...                a few times rather than trying to wait for a "settled" page state
+    ...                (Dynamics' persistent background polling makes networkidle-style
+    ...                waits unreliable — same reasoning as avoiding Reload elsewhere).
+    [Arguments]    ${method}    ${path}    ${body}=${None}
+    ${result}=    Wait Until Keyword Succeeds    3x    2s
+    ...    Execute Dataverse Fetch Once    ${method}    ${path}    ${body}
+    RETURN    ${result}
+
+Execute Dataverse Fetch Once
+    [Documentation]    Single attempt at a Dataverse Web API call from inside the page.
+    ...                See Dataverse Request In Browser for the retry wrapper around this.
+    ...                Returns a dict: status, ok, json (parsed body, or ${None} if not
+    ...                JSON), odataEntityId (the OData-EntityId response header, used to
+    ...                read a newly-created record's id), and pageUrl (for diagnosing
+    ...                wrong-origin failures). Fails if the response wasn't 2xx.
     [Arguments]    ${method}    ${path}    ${body}=${None}
     ${request}=    Create Dictionary    method=${method}    path=/api/data/v9.2/${path}    body=${body}
-    ${result}=    Evaluate JavaScript    ${None}    async (req) => { const headers = {'Accept': 'application/json', 'OData-MaxVersion': '4.0', 'OData-Version': '4.0'}; if (req.body !== null) { headers['Content-Type'] = 'application/json'; } const response = await fetch(req.path, {method: req.method, headers: headers, body: req.body !== null ? JSON.stringify(req.body) : undefined}); let json = null; try { json = await response.json(); } catch (e) { json = null; } return {status: response.status, ok: response.ok, json: json, odataEntityId: response.headers.get('OData-EntityId')}; }    arg=${request}
+    ${result}=    Evaluate JavaScript    ${None}    async (req) => { const headers = {'Accept': 'application/json', 'OData-MaxVersion': '4.0', 'OData-Version': '4.0'}; if (req.body !== null) { headers['Content-Type'] = 'application/json'; } const response = await fetch(req.path, {method: req.method, headers: headers, body: req.body !== null ? JSON.stringify(req.body) : undefined}); let json = null; try { json = await response.json(); } catch (e) { json = null; } return {status: response.status, ok: response.ok, json: json, odataEntityId: response.headers.get('OData-EntityId'), pageUrl: window.location.href}; }    arg=${request}
     IF    not ${result}[ok]
-        Fail    Dataverse API call ${method} ${path} failed with status ${result}[status]: ${result}[json]
+        Fail    Dataverse API call ${method} ${path} failed with status ${result}[status] while the page was at '${result}[pageUrl]': ${result}[json]
     END
     RETURN    ${result}
 
