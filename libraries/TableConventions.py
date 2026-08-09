@@ -6,6 +6,7 @@ regardless of ${AUTH_MODE}, unlike DataverseLibrary.
 """
 from typing import Any
 
+from robot.api import logger
 from robot.api.deco import keyword, library
 
 from dataverse.conventions import check_all, check_main_form_available_to_everyone
@@ -37,5 +38,6 @@ class TableConventions:
 
         Returns a list of violation dicts — empty if none are role-restricted.
         """
+        logger.console(f"Checking main form conventions for table '{logical_name}' with {len(main_forms)} active main forms")
         violation = check_main_form_available_to_everyone(main_forms, logical_name)
         return [vars(violation)] if violation else []

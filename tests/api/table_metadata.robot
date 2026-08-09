@@ -9,21 +9,6 @@ Resource         ../../resources/business/authentication_keywords.resource
 Suite Setup      Setup For Auth Mode
 Suite Teardown   Teardown For Auth Mode
 
-*** Keywords ***
-Setup For Auth Mode
-    [Documentation]    Only auth_mode=browser needs a logged-in browser session — MSAL
-    ...                (service_principal) authenticates itself when DataverseLibrary is
-    ...                imported, so opening a browser (and possibly hitting MFA) for a
-    ...                purely API-driven suite would be pointless overhead.
-    IF    "${AUTH_MODE}" == "browser"
-        Zorg Voor Ingelogde Sessie En Dataverse Toegang
-    END
-
-Teardown For Auth Mode
-    IF    "${AUTH_MODE}" == "browser"
-        Close Browser
-    END
-
 *** Test Cases ***
 Klant Table Exists And Is Readable
     [Documentation]    Resolves the 'Klant' table's logical name (confirmed live:

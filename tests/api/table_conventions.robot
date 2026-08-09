@@ -11,20 +11,6 @@ Resource         ../../resources/api/table_conventions.resource
 Suite Setup      Setup For Auth Mode
 Suite Teardown   Teardown For Auth Mode
 
-*** Keywords ***
-Setup For Auth Mode
-    [Documentation]    Only auth_mode=browser needs a logged-in browser session — MSAL
-    ...                (service_principal) authenticates itself when DataverseLibrary is
-    ...                imported.
-    IF    "${AUTH_MODE}" == "browser"
-        Zorg Voor Ingelogde Sessie En Dataverse Toegang
-    END
-
-Teardown For Auth Mode
-    IF    "${AUTH_MODE}" == "browser"
-        Close Browser
-    END
-
 *** Test Cases ***
 All Custom Tables Follow Naming, Description, Icon Conventions
     [Documentation]    Audits every custom table at once and reports every violation

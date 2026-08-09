@@ -14,34 +14,99 @@ Library          String
 
 *** Keywords ***
 Dataverse Request In Browser
-    [Documentation]    Makes one Dataverse Web API call from inside the page, retrying if
-    ...                the browser was still mid-navigation. Dynamics 365's UCI app does
-    ...                several client-side redirects right after login, which can destroy
-    ...                the JS execution context mid-call — confirmed live via
-    ...                "Execution context was destroyed, most likely because of a
-    ...                navigation". Transient, not a real request error, so this retries
-    ...                a few times rather than trying to wait for a "settled" page state
-    ...                (Dynamics' persistent background polling makes networkidle-style
-    ...                waits unreliable — same reasoning as avoiding Reload elsewhere).
-    [Arguments]    ${method}    ${path}    ${body}=${None}
+    [Documentation]    Makes one Dataverse Web API call from inside the page. Owns
+    ...                exactly what's Dataverse-Web-API-specific — the api/data/v9.2/
+    ...                prefix and OData headers — then delegates the actual fetch
+    ...                (including retry) to the generic, API-family-agnostic
+    ...                Execute Fetch In Browser. Kept separate so a future client for a
+    ...                different family sharing this same page (e.g. Dataverse's own
+    ...                Search API, api/search/v1.0/) could reuse the generic layer
+    ...                without any of this Dataverse-specific knowledge — mirrors the
+    ...                Requester/DataApiClient split on the Python side.
+    ...
+    ...                Extra headers go through ${extra_headers} as an actual dict (build
+    ...                one with Create Dictionary first), NOT as free keyword arguments —
+    ...                a free &{kwargs} catch-all makes Robot treat *any* positional
+    ...                argument containing an unescaped "=" as a possible named-argument
+    ...                match, and OData query strings are full of "=" ($select=...,
+    ...                $filter=...). Confirmed live: that swallowed the ${path} argument
+    ...                whole, leaving "expected 2 to 3 non-named arguments, got 1". A
+    ...                specific named parameter only matches the literal "extra_headers=",
+    ...                so it doesn't collide with query-string content the way a catch-all
+    ...                does. Example:
+    ...                ${headers}=    Create Dictionary    If-None-Match=*
+    ...                Dataverse Request In Browser    GET    persons    extra_headers=${headers}
+    [Arguments]    ${method}    ${path}    ${body}=${None}    ${extra_headers}=${None}
+    ${extra_headers}=    Evaluate    $extra_headers if $extra_headers is not None else {}
+    ${odata_headers}=    Create Dictionary    OData-MaxVersion=4.0    OData-Version=4.0
+    ${headers}=    Evaluate    {**$odata_headers, **$extra_headers}
     ${result}=    Wait Until Keyword Succeeds    3x    2s
-    ...    Execute Dataverse Fetch Once    ${method}    ${path}    ${body}
+    ...    Execute Fetch In Browser    ${method}    api/data/v9.2/${path}    ${body}    ${headers}
     RETURN    ${result}
 
-Execute Dataverse Fetch Once
-    [Documentation]    Single attempt at a Dataverse Web API call from inside the page.
-    ...                See Dataverse Request In Browser for the retry wrapper around this.
+Execute Fetch In Browser
+    [Documentation]    Single attempt at a fetch() call from inside the page — generic,
+    ...                no assumptions about which API family. ${path} is used exactly as
+    ...                given (relative to the environment root); this keyword itself
+    ...                knows nothing about api/data/ or OData. The Dynamics 365 UCI app
+    ...                does several client-side redirects right after login, which can
+    ...                destroy the JS execution context mid-call — confirmed live via
+    ...                "Execution context was destroyed, most likely because of a
+    ...                navigation" — which is why Dataverse Request In Browser wraps this
+    ...                with retry rather than this keyword doing it itself: that race is
+    ...                about the *page's* navigation state, not about any one API family,
+    ...                so it applies equally to whatever ends up calling this directly.
+    ...
     ...                Returns a dict: status, ok, json (parsed body, or ${None} if not
-    ...                JSON), odataEntityId (the OData-EntityId response header, used to
-    ...                read a newly-created record's id), and pageUrl (for diagnosing
-    ...                wrong-origin failures). Fails if the response wasn't 2xx.
-    [Arguments]    ${method}    ${path}    ${body}=${None}
-    ${request}=    Create Dictionary    method=${method}    path=/api/data/v9.2/${path}    body=${body}
-    ${result}=    Evaluate JavaScript    ${None}    async (req) => { const headers = {'Accept': 'application/json', 'OData-MaxVersion': '4.0', 'OData-Version': '4.0'}; if (req.body !== null) { headers['Content-Type'] = 'application/json'; } const response = await fetch(req.path, {method: req.method, headers: headers, body: req.body !== null ? JSON.stringify(req.body) : undefined}); let json = null; try { json = await response.json(); } catch (e) { json = null; } return {status: response.status, ok: response.ok, json: json, odataEntityId: response.headers.get('OData-EntityId'), pageUrl: window.location.href}; }    arg=${request}
+    ...                JSON), odataEntityId (the OData-EntityId response header — harmless
+    ...                to read even for non-OData responses, just ${None} if absent), and
+    ...                pageUrl (for diagnosing wrong-origin failures). Fails if the
+    ...                response wasn't 2xx.
+    [Arguments]    ${method}    ${path}    ${body}=${None}    ${extra_headers}=${None}
+    ${extra_headers}=    Evaluate    $extra_headers if $extra_headers is not None else {}
+    ${request}=    Create Dictionary
+    ...    method=${method}
+    ...    path=/${path}
+    ...    body=${body}
+    ...    extraHeaders=${extra_headers}
+    ${result}=    Evaluate JavaScript
+    ...    ${None}
+    ...    async (req) => {
+    ...        const headers = { 'Accept': 'application/json' };
+    ...        Object.assign(headers, req.extraHeaders || {});
+    ...        if (req.body !== null) {
+    ...            headers['Content-Type'] = 'application/json';
+    ...        }
+    ...        const response = await fetch(req.path, {
+    ...            method: req.method,
+    ...            headers: headers,
+    ...            body: req.body !== null ? JSON.stringify(req.body) : undefined,
+    ...        });
+    ...        let json = null;
+    ...        try {
+    ...            json = await response.json();
+    ...        } catch (e) {
+    ...            json = null;
+    ...        }
+    ...        return {
+    ...            status: response.status,
+    ...            ok: response.ok,
+    ...            json: json,
+    ...            odataEntityId: response.headers.get('OData-EntityId'),
+    ...            pageUrl: window.location.href,
+    ...        };
+    ...    }
+    ...    arg=${request}
     IF    not ${result}[ok]
-        Fail    Dataverse API call ${method} ${path} failed with status ${result}[status] while the page was at '${result}[pageUrl]': ${result}[json]
+        Fail    HTTP ${method} /${path} failed with status ${result}[status] while the page was at '${result}[pageUrl]': ${result}[json]
     END
     RETURN    ${result}
+
+Who Am I In Browser
+    [Documentation]    Calls the Dataverse WhoAmI endpoint from inside the page — the
+    ...                simplest possible connectivity/auth smoke test.
+    ${result}=    Dataverse Request In Browser    GET    WhoAmI
+    RETURN    ${result}[json]
 
 Get Table Logical Name In Browser
     [Documentation]    Resolves a table's logical name from its display name (e.g.

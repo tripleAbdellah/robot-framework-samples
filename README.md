@@ -16,11 +16,20 @@ cp .env.example .env   # fill in real values — .env is git-ignored, never comm
 
 Credentials live in `.env` (git-ignored) — see [.env.example](.env.example) for the full list
 (`DATAVERSE_USERNAME`/`PASSWORD` for `auth_mode=browser`, `DATAVERSE_CLIENT_ID`/`CLIENT_SECRET`/
-`TENANT_ID` for `auth_mode=service_principal`). Load it before running `robot`:
+`TENANT_ID` for `auth_mode=service_principal`). Load it into your shell once per session —
+**must be sourced/dot-sourced, not executed**, or the variables won't persist (each script
+explains why and warns if you get it wrong):
 
 ```bash
-set -a; source .env; set +a
+source init-env.sh      # bash/zsh
 ```
+```powershell
+. .\init-env.ps1        # PowerShell
+```
+
+(Equivalent to manually running `set -a; source .env; set +a` — the script just adds a
+"did you forget to create `.env`" check and confirms which variable *names* loaded, without
+ever printing their values.)
 
 `DATAVERSE_USE_API` (`true`/`false` in `.env`) picks the default `${AUTH_MODE}` — `true` means
 `service_principal` (API-only, no browser/MFA), `false`/unset means `browser`. A command-line
@@ -96,7 +105,7 @@ Every keyword in [resources/api/dataverse_keywords.resource](resources/api/datav
 callers above this layer never see the split:
 
 - **`auth_mode=browser`** (default) — calls run as `fetch()` executed *inside* the already
-  logged-in page (`resources/api/dataverse_browser_transport.resource`), not from Python. This is
+  logged-in page (`resources/api/dataverse_browser_client.resource`), not from Python. This is
   confirmed necessary, not a style choice: a plain cookie replay from an external Python client
   returned 401 against the real tenant, so something beyond cookies authenticates the app's own
   calls (its own requests carry `x-ms-sw-*` headers, suggesting a Service Worker-injected token).

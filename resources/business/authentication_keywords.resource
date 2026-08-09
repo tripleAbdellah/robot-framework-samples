@@ -33,7 +33,7 @@ Zorg Voor Ingelogde Sessie En Dataverse Toegang
     ...                the session is saved and every later run reuses it headlessly.
     ...                Leaves an authenticated page open — under auth_mode=browser, later
     ...                Dataverse calls run as fetch() inside that same page (see
-    ...                resources/api/dataverse_browser_transport.resource), so nothing
+    ...                resources/api/dataverse_browser_client.resource), so nothing
     ...                further needs to be captured or handed off here.
     ${session_exists}=    Run Keyword And Return Status    File Should Exist    ${STORAGE_STATE_PATH}
     IF    ${session_exists}
@@ -49,4 +49,24 @@ Zorg Voor Ingelogde Sessie En Dataverse Toegang
         Create Directory    ${STORAGE_STATE_DIR}
         Copy File    ${state_file}    ${STORAGE_STATE_PATH}
         Log    Session saved to ${STORAGE_STATE_PATH} for future headless runs.    level=WARN
+    END
+
+Setup For Auth Mode
+    [Documentation]    Suite Setup for API-only suites (no UI actions needed).
+    ...                auth_mode=browser needs a logged-in browser session; opening one
+    ...                for auth_mode=service_principal would be pointless overhead, so
+    ...                that branch instead explicitly builds the Python client — see
+    ...                DataverseLibrary.py for why this can't happen at Library-import
+    ...                time instead.
+    IF    "${AUTH_MODE}" == "browser"
+        Zorg Voor Ingelogde Sessie En Dataverse Toegang
+    ELSE
+        DataverseLibrary.Initialize Service Principal
+        ...    %{DATAVERSE_CLIENT_ID=${EMPTY}}    %{DATAVERSE_CLIENT_SECRET=${EMPTY}}    %{DATAVERSE_TENANT_ID=${EMPTY}}
+    END
+
+Teardown For Auth Mode
+    [Documentation]    Suite Teardown pairing with Setup For Auth Mode.
+    IF    "${AUTH_MODE}" == "browser"
+        Close Browser
     END
